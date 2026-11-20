@@ -66,7 +66,3 @@ Code: this repository. Total API spend for the full evaluation was about $5.
 ## Limits
 
 One labeler (me, not a compliance officer) produced the risk labels, the label-noise verdicts and the reply grades. Samples are small: about ±4 points on product accuracy, and about ±10 points on reply checks with 40 replies per model. The risk-label set over-samples complaints that ended in money or a late response, so its rates describe that set, not all complaints.
-
-## Resume bullet
-
-Built and evaluated a Claude-powered triage pipeline on 385 real CFPB complaints (from an 811K-record archive, after removing 49% duplicate narratives) across 11 product lines, benchmarking three model tiers on accuracy, cost and latency. Recommended the mid-tier model: 88.5% routing accuracy on the real-world product mix and 97.5% compliance-safe reply drafts, at half the top tier's cost ($3.04 per 1,000 complaints). Showed that an outcome-based risk proxy missed 57% of complaints a human would escalate.
