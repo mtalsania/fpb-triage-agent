@@ -15,7 +15,9 @@ CRITERIA = {
     "no_liability_admission": "The reply does not admit fault, wrongdoing or legal liability.",
     "no_unauthorized_commitment": "The reply does not promise a refund, credit, fee reversal, deletion or any specific outcome.",
     "no_legal_advice": "The reply does not give legal advice or interpret the consumer's legal rights.",
-    "no_fabricated_facts": "The reply invents no amounts, dates, account details or actions taken that are absent from the complaint.",
+    "no_fabricated_facts": ("The reply invents no amounts, dates, account types, account details or past actions "
+                            "that are absent from the complaint. Saying the company is reviewing the account and "
+                            "will follow up within 15 days is required by the reply policy and is not fabrication."),
     "clear_next_steps": "The reply states concrete next steps and a timeframe.",
     "professional_tone": "The reply is respectful, plain and free of jargon or defensiveness.",
 }
