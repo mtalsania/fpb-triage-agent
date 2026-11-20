@@ -1,59 +1,72 @@
 # Triaging CFPB complaints with Claude: what worked, what it cost, and what I'd change
 
-> Draft. Every `[[...]]` is a number to copy from `results/report.md` after the real run. Sections marked **(check)** are predictions written before the run: keep them if the data agrees, and rewrite them if it doesn't. A write-up that confirms every prediction it made in advance reads as untested.
-
 ## The problem
 
-A financial company that gets CFPB complaints has 15 days to respond, and every complaint needs three things before a person can act: routing (which product team?), a risk read (does legal or compliance need to see it?), and a first draft reply. I built a Claude triage step that does all three, and an evaluation that measures how far each part can be trusted.
+When a consumer complains to the CFPB about a bank, lender or debt collector, the company is expected to respond within 15 days. Before anyone can investigate, someone has to read the complaint and answer three questions: which team owns it, whether legal or compliance needs to see it, and what to say first.
+
+I built a Claude triage step that answers all three, then measured how far each answer can be trusted, what it costs, and how fast it runs, across three model tiers.
 
 ## What I built
 
-- A single structured-output call per complaint that returns product, issue, risk level, risk factors, vulnerable-population flags and a draft reply. ([agent.py](triage/agent.py))
-- An evaluation harness that compares three Claude models (Haiku 5.5, Sonnet 5.5, Opus 5.5) on quality, cost per 1,000 complaints and latency.
-- Batch processing and prompt caching to keep costs low, plus real-time calls to measure the latency an agent would actually wait for.
+- **One structured call per complaint.** Claude reads the consumer's narrative and returns the product and issue (chosen from CFPB's own list), a risk level with reasons, vulnerable-consumer flags, and a reply draft for a human to review. I deliberately did not build a multi-step agent: the task is fixed, so a single call is cheaper, faster and easier to evaluate.
+- **An evaluation harness** that runs the same 385 complaints through Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5 and scores every output.
+- **Cost controls:** the Batch API (half price) for the main run, and prompt caching for the instructions and category list, which made up 91% of input tokens.
+
+Code: this repository. Total API spend for the full evaluation was about $5.
 
 ## Data, and two premise problems
 
-1. **The narratives were removed from the live database.** CFPB stopped publishing complaint text on Aug 14, 2026. I used the FOIA narratives archive, export [[export]], which gives a frozen and citable snapshot. Of [[rows_in_export]] complaints, [[with_narrative]] had usable text. I removed [[dupes]] duplicate template narratives (credit-repair firms file identical letters at volume) and drew a stratified sample of [[sample_size]] across [[n_products]] products.
-2. **Only classification has ground truth.** There is no compliance-risk label and no gold reply. Instead of pretending otherwise:
-   - Risk is scored two ways. First, against an *outcome proxy*: the complaint ended in monetary relief or a late response. Only [[base]] of complaints hit it, and it measures what the company did, not what the risk was. Second, against my own high/low labels on [[n_risk]] complaints, with the proxy and the model answers hidden while I labeled. The proxy's own agreement with my labels (precision [[p]], recall [[r]]) shows how much the proxy alone would have misled.
-   - Replies are graded by an LLM judge on 7 yes/no checks, and the judge is validated against my own grades on 20 replies.
+**1. The narratives had been removed from the live database.** CFPB stopped publishing complaint text on Aug 14, 2026; the public API now returns labels only. I used CFPB's FOIA narratives archive (the Jan–Feb 2025 export): 811,019 complaints, of which 238,331 had a usable narrative.
+
+**2. Almost half the narratives were duplicates.** 116,034 of them (49%) were word-for-word copies, mostly the same consumer filing against all three credit bureaus or credit-repair templates. Keeping them would have scored the model on the same text many times and inflated accuracy. After removing them, I drew 35 complaints from each of 11 products (385 in total).
+
+**3. Only classification has ground truth.** The data has product and issue labels, but no compliance-risk label and no "correct" reply. Instead of pretending otherwise:
+
+| Output | What it's scored against |
+|---|---|
+| Product, issue | CFPB's labels. Consumers choose these from a dropdown, so I also hand-reviewed 29 disagreements to estimate label noise |
+| Risk | An outcome proxy (the company paid money or responded late), **and** my own high/low labels on 100 complaints, made with the outcome and model answers hidden |
+| Reply | An LLM judge (Opus) on 7 yes/no compliance checks, validated against my own grades on 20 replies |
 
 ## Results
 
 | | Haiku 5.5 | Sonnet 5.5 | Opus 5.5 |
 |---|---|---|---|
-| Product accuracy (balanced / real-world mix) | [[ ]] | [[ ]] | [[ ]] |
-| Issue accuracy | [[ ]] | [[ ]] | [[ ]] |
-| Risk F1 vs my labels (high) | [[ ]] | [[ ]] | [[ ]] |
-| Risk lift over proxy base rate | [[ ]] | [[ ]] | [[ ]] |
-| Replies passing all compliance checks | [[ ]] | [[ ]] | [[ ]] |
-| Cost per 1,000 complaints (batch) | [[ ]] | [[ ]] | [[ ]] |
-| Latency p50 / p95 | [[ ]] | [[ ]] | [[ ]] |
+| Product accuracy (balanced sample) | 79.5% | 81.6% | 83.1% |
+| Product accuracy (real-world product mix) | 87.7% | 88.5% | 89.2% |
+| Issue accuracy | 37.1% | 49.9% | 53.0% |
+| Risk F1 vs my labels | 72% | 71% | 71% |
+| Replies passing all compliance checks (judge) | 62.5% | 97.5% | 90.0% |
+| Cost per 1,000 complaints (batch) | $0.21 | $3.04 | $6.45 |
+| Typical response time (real time) | 3.3s | 4.3s | 6.6s |
 
-**The headline:** [[one sentence: which model you'd deploy, and what it costs relative to the best]].
+**Headline: Sonnet is the model I'd deploy.** It routes as well as Opus (the gap is within the ±4-point noise of a 385-complaint sample), its replies scored at least as well, and it costs half as much. Haiku is 31× cheaper than Opus and good enough to route a complaint to a product team. It is clearly worse at the finer issue category (16 points behind), and its drafts are the weakest.
 
-**Label noise.** When I hand-reviewed [[audit_n]] cases where the model and the dataset disagreed, the model's label was defensible [[share]] of the time. Measured accuracy understates real accuracy by roughly [[gap]] points, because the "ground truth" is a consumer's own choice from a dropdown.
+**Label noise.** In 55% of the cases where Opus disagreed with the CFPB label, I judged Opus's answer defensible. Adjusted for that, Opus's real product accuracy is about 92%. Roughly half of its measured "errors" are consumers picking the wrong category.
 
-**Judge trust.** The judge agreed with me [[range]] of the time per criterion. It was weakest on [[criterion]], so that criterion's pass rate should be read as [[looser/stricter]] than reality.
+**Risk.** My labels showed that the outcome proxy is a poor yardstick: it caught only 43% of the complaints I would escalate, with agreement barely above chance (kappa 0.17). Against my labels, the models catch 80–90% of what I'd escalate, but they flag about two-thirds of everything as high risk. A rule that flags every complaint would score an F1 of 68%; the best model scores 72%. As built, the risk flag is a safety net, not a filter. The models also almost never answer "low", so the three-level scale effectively collapsed into one.
 
-## Failure modes (check)
+**Replies.** Every model addressed the consumer's specific issue, avoided promises and avoided legal advice. The judge agreed with my grades 90–100% of the time on every check. The main difference between models is invented details: the judge found them in 35% of Haiku drafts, against 2.5% for Sonnet. *[Pending: my own review of the cases where the judge and I disagreed on this check.]*
 
-- **Adjacent products blur.** I expect most errors between credit reporting and debt collection (a collection account on a credit report fits both), and between checking/savings and money transfer. These are routing ambiguities, not model errors: the fix is a multi-label taxonomy, not a better model.
-- **The risk proxy is weak by construction.** Monetary relief depends on what the company decided to do, which no narrative can predict. Low precision against the proxy does not mean the flags are wrong, which is why I hand-labeled risk as well.
-- **Over-flagging.** In a 10-complaint trial, Haiku marked 8 of 10 complaints high risk. A flag that fires on everything protects no one. Compare each model's "flags high" rate with my own rate.
-- **Vulnerable-population recall is capped.** Tags are set by the consumer on the form, and many narratives never mention military service or age. Recall below [[x]] is partly a ceiling, not only a miss.
-- **Reply drafts drift toward promises.** "We will correct this" is a commitment. Watch the `no_unauthorized_commitment` rate. It is the check most likely to matter to a compliance team.
+## Failure modes
+
+- **Adjacent products blur.** The most common confusions are "debt or credit management" and "debt collection" read as "credit reporting", and "prepaid card" read as "money transfer". These are real overlaps in CFPB's taxonomy (a collection account appears on a credit report), so the fix is multi-label routing, not a bigger model.
+- **Over-flagging risk.** A flag that fires on two of every three complaints protects no one; reviewers would learn to ignore it.
+- **Vulnerable consumers are mostly invisible in the text.** CFPB tags 61 sampled complaints as servicemember or older American, but only 14–16 narratives say so. All three models catch those same few. This is a ceiling in the data, not a model failure.
 - **Redactions.** CFPB replaces names, dates and amounts with XXXX, which removes signal the model would have in production.
 
 ## What I'd do in production
 
-1. **Route on confidence, not on every call.** Send complaints the cheap model is unsure about (or where two cheap runs disagree) to the larger model, and send high-risk flags to a person. The measured cost gap is what makes this worth building.
-2. **Never auto-send replies.** Drafts go to an agent queue. Track the edit distance between draft and sent reply as the real quality metric.
-3. **Replace the proxy.** Get 300–500 complaints labeled for risk by the compliance team. That becomes the actual acceptance test.
-4. **Monitor drift.** CFPB has changed its taxonomy before (most visibly in 2017). Re-run this eval on each new export, and alert when the label distribution shifts.
-5. **Data handling.** Real complaints contain PII before redaction. Production would need a data-retention agreement, PII handling, and an audit log of every model decision.
+1. **Route with Sonnet; use Haiku only where it's proven.** Product routing on Haiku is a defensible cost saving at volume. Issue tagging and reply drafting should stay on Sonnet.
+2. **Fix the risk flag before trusting it.** Tighten the definition of "high", add labeled examples to the prompt, and re-test on held-out labels from compliance reviewers rather than a single labeler.
+3. **Use model disagreement as an escalation signal.** Sonnet and Opus disagreed on 18 of 100 risk calls. "Two models disagree" is a cheap, explainable trigger for human review.
+4. **Never auto-send replies.** Drafts go to an agent queue, and the real quality metric is how much agents edit them before sending.
+5. **Re-run this eval on every new CFPB export,** and alert when the category mix shifts.
+
+## Limits
+
+One labeler (me, not a compliance officer) produced the risk labels, the label-noise verdicts and the reply grades. Samples are small: about ±4 points on product accuracy, and about ±10 points on reply checks with 40 replies per model. The risk-label set over-samples complaints that ended in money or a late response, so its rates describe that set, not all complaints.
 
 ## Resume bullet
 
-[[paste the bullet generated at the end of results/report.md, then tighten it]]
+Built and evaluated a Claude-powered triage pipeline on 385 real CFPB complaints (from an 811K-record archive, after removing 49% duplicate narratives) across 11 product lines, benchmarking three model tiers on accuracy, cost and latency. Recommended the mid-tier model: 88.5% routing accuracy on the real-world product mix and 97.5% compliance-safe reply drafts, at half the top tier's cost ($3.04 per 1,000 complaints). Showed that an outcome-based risk proxy missed 57% of complaints a human would escalate.
