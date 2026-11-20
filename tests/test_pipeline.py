@@ -38,3 +38,18 @@ def test_schema_matches_taxonomy():
     assert s["properties"]["product"]["enum"] == ["A", "B"]
     assert s["properties"]["issue"]["enum"] == ["x", "y", "z"]
     assert s["additionalProperties"] is False
+
+
+def test_report_scores_only_attempted(tmp_path, monkeypatch):
+    for name, sub in [("DATA_DIR", "data"), ("RAW_DIR", "data/raw"),
+                      ("RESULTS_DIR", "results"), ("REVIEW_DIR", "review")]:
+        monkeypatch.setattr(C, name, tmp_path / sub)
+    monkeypatch.setattr(C, "PER_PRODUCT", 20)
+    monkeypatch.setattr(C, "MIN_PRODUCT_SUPPORT", 20)
+    C.RAW_DIR.mkdir(parents=True)
+    write(C.RAW_DIR / C.EXPORTS[C.DEFAULT_EXPORT])
+    data.prepare()
+    pipeline.triage(["haiku"], mode="mock", limit=10)
+    report.build_report(["haiku"])
+    m = json.loads((C.RESULTS_DIR / "summary.json").read_text())["models"][0]
+    assert m["n"] == 10 and m["errors"] == 0
