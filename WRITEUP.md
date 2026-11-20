@@ -36,7 +36,7 @@ Code: this repository. Total API spend for the full evaluation was about $5.
 | Product accuracy (real-world product mix) | 87.7% | 88.5% | 89.2% |
 | Issue accuracy | 37.1% | 49.9% | 53.0% |
 | Risk F1 vs my labels | 72% | 71% | 71% |
-| Replies passing all compliance checks (judge) | 62.5% | 97.5% | 90.0% |
+| Replies passing all compliance checks (judge) | 67.5% | 90.0% | 82.5% |
 | Cost per 1,000 complaints (batch) | $0.21 | $3.04 | $6.45 |
 | Typical response time (real time) | 3.3s | 4.3s | 6.6s |
 
@@ -46,7 +46,7 @@ Code: this repository. Total API spend for the full evaluation was about $5.
 
 **Risk.** My labels showed that the outcome proxy is a poor yardstick: it caught only 43% of the complaints I would escalate, with agreement barely above chance (kappa 0.17). Against my labels, the models catch 80–90% of what I'd escalate, but they flag about two-thirds of everything as high risk. A rule that flags every complaint would score an F1 of 68%; the best model scores 72%. As built, the risk flag is a safety net, not a filter. The models also almost never answer "low", so the three-level scale effectively collapsed into one.
 
-**Replies.** Every model addressed the consumer's specific issue, avoided promises and avoided legal advice. The judge agreed with my grades 90–100% of the time on every check. The main difference between models is invented details. When I reviewed the cases where the judge and I disagreed, I found the first version of the judge was too strict in one way and right in another. It penalized "we are reviewing your account", a sentence my own reply policy requires. It also correctly caught a draft that called the consumer's account a "savings account" when the complaint never said so, which I had missed. I fixed the rubric so policy-required language isn't counted, and re-ran the judge: [[haiku / sonnet / opus no_fabricated_facts pass rate after fix]].
+**Replies.** At least 39 of 40 drafts per model addressed the consumer's specific issue, avoided promises and avoided legal advice. The judge agreed with my grades 90–100% of the time on every check. The main difference between models is invented details. When I reviewed the cases where the judge and I disagreed, I found the first version of the judge was too strict in one way and right in another. It penalized "we are reviewing your account", a sentence my own reply policy requires. It also correctly caught a draft that called the consumer's account a "savings account" when the complaint never said so, which I had missed. I rewrote the check to do both: policy-required language no longer counts, and an invented account type now does. On the re-run, drafts free of invented details were 70% for Haiku, 90% for Sonnet and 85% for Opus, and invented details account for nearly every compliance failure. Scores fell a few points for Sonnet and Opus, partly because the rewritten check is stricter on account details and partly because the judge itself varies from run to run. A gap of two or three replies out of 40 is noise, so the honest reading is: Sonnet and Opus are close, and Haiku invents details about three times as often.
 
 ## Failure modes
 
@@ -65,4 +65,4 @@ Code: this repository. Total API spend for the full evaluation was about $5.
 
 ## Limits
 
-One labeler (me, not a compliance officer) produced the risk labels, the label-noise verdicts and the reply grades. Samples are small: about ±4 points on product accuracy, and about ±10 points on reply checks with 40 replies per model. The risk-label set over-samples complaints that ended in money or a late response, so its rates describe that set, not all complaints.
+One labeler (me, not a compliance officer) produced the risk labels, the label-noise verdicts and the reply grades. Samples are small: about ±4 points on product accuracy, and about ±10 points on reply checks with 40 replies per model. Re-running the same judge moved reply scores by up to 7.5 points, so I report the final run and treat gaps under 10 points as ties. The risk-label set over-samples complaints that ended in money or a late response, so its rates describe that set, not all complaints.
