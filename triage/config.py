@@ -46,3 +46,7 @@ JUDGE_EFFORT = "medium"
 JUDGE_N_PER_MODEL = 40    # replies judged per model
 LATENCY_N = 20            # real-time (non-batch) calls per model for latency numbers
 SYNC_WORKERS = 4
+
+# Human risk labels (review/risk_labels.csv)
+RISK_LABEL_N = 100
+RISK_LABEL_MAX_PROXY_POS = 40  # oversample proxy positives so both classes appear

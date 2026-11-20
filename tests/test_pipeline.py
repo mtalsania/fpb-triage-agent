@@ -25,8 +25,15 @@ def test_end_to_end_mock(tmp_path, monkeypatch):
     pipeline.latency(models, n=5, mock=True)
     pipeline.run_judge(models, n=10, mode="mock")
     pipeline.review(models)
+    import pandas as pd
+    rl = pd.read_csv(C.REVIEW_DIR / "risk_labels.csv")
+    assert len(rl) == 80 and set(rl.columns) == {"cid", "company", "narrative", "risk", "notes"}
+    rl["risk"] = ["high" if i % 3 == 0 else "low" for i in range(len(rl))]
+    rl.to_csv(C.REVIEW_DIR / "risk_labels.csv", index=False)
     report.build_report(models)
     summary = json.loads((C.RESULTS_DIR / "summary.json").read_text())
+    assert summary["risk_vs_human"]["n"] == 80
+    assert set(summary["risk_vs_human"]["models"]) == set(models)
     assert {m["model"] for m in summary["models"]} == set(models)
     assert all(0 <= m["product_acc"] <= 1 for m in summary["models"])
 
@@ -49,6 +56,8 @@ def test_report_scores_only_attempted(tmp_path, monkeypatch):
     C.RAW_DIR.mkdir(parents=True)
     write(C.RAW_DIR / C.EXPORTS[C.DEFAULT_EXPORT])
     data.prepare()
+    pipeline.risk_labels()  # must work before any model has run
+    assert (C.REVIEW_DIR / "risk_labels.csv").exists()
     pipeline.triage(["haiku"], mode="mock", limit=10)
     report.build_report(["haiku"])
     m = json.loads((C.RESULTS_DIR / "summary.json").read_text())["models"][0]

@@ -145,6 +145,42 @@ def judge_agreement():
     return out
 
 
+def _prf(truth: pd.Series, pred: pd.Series) -> dict:
+    tp = int((truth & pred).sum())
+    prec = tp / pred.sum() if pred.sum() else None
+    rec = tp / truth.sum() if truth.sum() else None
+    f1 = 2 * prec * rec / (prec + rec) if prec and rec else None
+    kappa = cohen_kappa_score(truth, pred) if truth.nunique() > 1 or pred.nunique() > 1 else None
+    return {"precision": prec, "recall": rec, "f1": f1, "kappa": kappa,
+            "flag_rate": float(pred.mean()), "accuracy": float((truth == pred).mean())}
+
+
+def risk_vs_human(models, gold):
+    """Score risk flags against the hand labels in review/risk_labels.csv."""
+    p = C.REVIEW_DIR / "risk_labels.csv"
+    if not p.exists():
+        return None
+    h = pd.read_csv(p, dtype=str).fillna("")
+    h["risk"] = h["risk"].str.strip().str.lower()
+    h = h[h["risk"].isin(["high", "low"])]
+    if h.empty:
+        return None
+    h = h.merge(gold[["cid", "proxy_high_risk"]], on="cid")
+    truth = h["risk"].eq("high")
+    out = {"n": len(h), "human_high_rate": float(truth.mean()),
+           "proxy": _prf(truth, h["proxy_high_risk"].astype(bool)), "models": {}}
+    for m in models:
+        pred = _load("triage", m)
+        if pred is None or "risk_level" not in pred:
+            continue
+        x = h.merge(pred[["cid", "risk_level"]], on="cid", how="left")
+        t = x["risk"].eq("high")
+        out["models"][m] = {"high_only": _prf(t, x["risk_level"].eq("high")),
+                            "high_or_medium": _prf(t, x["risk_level"].isin(["high", "medium"])),
+                            "n": int(x["risk_level"].notna().sum())}
+    return out
+
+
 def _resume_bullet(rows, stats):
     rows = [r for r in rows if r]
     if len(rows) < 1:
@@ -176,6 +212,7 @@ def build_report(models):
         print("No results yet. Run: python run.py triage")
         return
     agree = judge_agreement()
+    rh = risk_vs_human(models, gold)
 
     L = ["# CFPB complaint triage: evaluation report", ""]
     L += [f"Data: `{stats['export']}`. {stats['rows_in_export']:,} complaints in the export; "
@@ -214,6 +251,21 @@ def build_report(models):
     L += ["", f"Risk proxy base rate (monetary relief or late response): {_pct(rows[0]['risk_proxy_base_rate'])}. "
           "This is an outcome proxy, not a compliance label: it says what happened, not what the risk was.", ""]
 
+    if rh:
+        L += ["## Risk vs your hand labels", "",
+              f"{rh['n']} complaints labeled by hand; {_pct(rh['human_high_rate'])} labeled high. "
+              "Proxy-positive complaints were oversampled for labeling, so treat rates as within this set.", "",
+              "| Flagger | Flags high | Precision | Recall | F1 | Kappa |", "|---|---|---|---|---|---|"]
+        k = lambda v: "n/a" if v is None else f"{v:.2f}"
+        def rrow(name, d):
+            L.append(f"| {name} | {_pct(d['flag_rate'])} | {_pct(d['precision'])} | {_pct(d['recall'])} | "
+                     f"{_pct(d['f1'])} | {k(d['kappa'])} |")
+        rrow("Outcome proxy", rh["proxy"])
+        for m, d in rh["models"].items():
+            rrow(f"{m} (high)", d["high_only"])
+            rrow(f"{m} (high or medium)", d["high_or_medium"])
+        L += ["", "The proxy row shows how well the outcome proxy itself matches your judgment.", ""]
+
     L += ["## Most common product confusions", ""]
     for r in rows:
         L.append(f"**{r['model']}**: " + ("; ".join(f"{a} -> {b} ({n})" for a, b, n in r["top_confusions"]) or "none"))
@@ -244,7 +296,8 @@ def build_report(models):
 
     C.RESULTS_DIR.mkdir(exist_ok=True)
     (C.RESULTS_DIR / "report.md").write_text("\n".join(L))
-    (C.RESULTS_DIR / "summary.json").write_text(json.dumps({"models": rows, "judge_agreement": agree},
+    (C.RESULTS_DIR / "summary.json").write_text(json.dumps({"models": rows, "judge_agreement": agree,
+                                                            "risk_vs_human": rh},
                                                            indent=2, default=str))
     print("\n".join(L))
     print("\nSaved results/report.md and results/summary.json")
