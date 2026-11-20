@@ -6,6 +6,7 @@ exactly what was dropped and why.
 import io
 import json
 import re
+import ssl
 import sys
 import urllib.request
 import zipfile
@@ -48,8 +49,15 @@ def download(export: str) -> Path:
     url = C.ARCHIVE_BASE + name
     print(f"Downloading {url}\n(this can take a few minutes)")
     req = urllib.request.Request(url, headers={"User-Agent": "cfpb-triage-eval/1.0"})
+    # Python from python.org on macOS ships without system certificates, which
+    # fails with CERTIFICATE_VERIFY_FAILED. certifi's bundle avoids that.
     try:
-        with urllib.request.urlopen(req) as r, open(dest, "wb") as f:
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        ctx = ssl.create_default_context()
+    try:
+        with urllib.request.urlopen(req, context=ctx) as r, open(dest, "wb") as f:
             total = int(r.headers.get("Content-Length") or 0)
             done = 0
             while chunk := r.read(1 << 20):
@@ -60,8 +68,8 @@ def download(export: str) -> Path:
         print()
     except Exception as e:  # network blocked, file renamed, etc.
         dest.unlink(missing_ok=True)
-        sys.exit(f"Download failed ({e}).\nDownload it in a browser from the archive page and "
-                 f"save it as {dest}, then re-run.")
+        sys.exit(f"Download failed ({e}).\nDownload it with:\n  mkdir -p {dest.parent} && "
+                 f"curl -L -o {dest} {url}\nthen re-run.")
     return dest
 
 
