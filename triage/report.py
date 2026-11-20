@@ -27,7 +27,8 @@ def score_model(m, gold, stats):
     pred = _load("triage", m)
     if pred is None:
         return None
-    df = gold.merge(pred, on="cid", how="left", suffixes=("", "_pred"))
+    # Score only complaints this model was run on (a --limit trial runs a subset).
+    df = gold.merge(pred, on="cid", how="inner", suffixes=("", "_pred"))
     ok = df["product_pred"].notna() if "product_pred" in df else pd.Series(False, index=df.index)
     d = df[ok]
     r = {"model": m, "model_id": C.MODELS[m]["id"], "n": len(df), "errors": int((~ok).sum())}
