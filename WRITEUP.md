@@ -16,7 +16,7 @@ A financial company that gets CFPB complaints has 15 days to respond, and every 
 
 1. **The narratives were removed from the live database.** CFPB stopped publishing complaint text on Aug 14, 2026. I used the FOIA narratives archive, export [[export]], which gives a frozen and citable snapshot. Of [[rows_in_export]] complaints, [[with_narrative]] had usable text. I removed [[dupes]] duplicate template narratives (credit-repair firms file identical letters at volume) and drew a stratified sample of [[sample_size]] across [[n_products]] products.
 2. **Only classification has ground truth.** There is no compliance-risk label and no gold reply. Instead of pretending otherwise:
-   - Risk is scored against an *outcome proxy*: the complaint ended in monetary relief or a late response. A proxy measures what happened, not what the risk was, so I report lift over the base rate instead of accuracy.
+   - Risk is scored two ways. First, against an *outcome proxy*: the complaint ended in monetary relief or a late response. Only [[base]] of complaints hit it, and it measures what the company did, not what the risk was. Second, against my own high/low labels on [[n_risk]] complaints, with the proxy and the model answers hidden while I labeled. The proxy's own agreement with my labels (precision [[p]], recall [[r]]) shows how much the proxy alone would have misled.
    - Replies are graded by an LLM judge on 7 yes/no checks, and the judge is validated against my own grades on 20 replies.
 
 ## Results
@@ -25,7 +25,8 @@ A financial company that gets CFPB complaints has 15 days to respond, and every 
 |---|---|---|---|
 | Product accuracy (balanced / real-world mix) | [[ ]] | [[ ]] | [[ ]] |
 | Issue accuracy | [[ ]] | [[ ]] | [[ ]] |
-| Risk lift over base rate ([[base]] base rate) | [[ ]] | [[ ]] | [[ ]] |
+| Risk F1 vs my labels (high) | [[ ]] | [[ ]] | [[ ]] |
+| Risk lift over proxy base rate | [[ ]] | [[ ]] | [[ ]] |
 | Replies passing all compliance checks | [[ ]] | [[ ]] | [[ ]] |
 | Cost per 1,000 complaints (batch) | [[ ]] | [[ ]] | [[ ]] |
 | Latency p50 / p95 | [[ ]] | [[ ]] | [[ ]] |
@@ -39,7 +40,8 @@ A financial company that gets CFPB complaints has 15 days to respond, and every 
 ## Failure modes (check)
 
 - **Adjacent products blur.** I expect most errors between credit reporting and debt collection (a collection account on a credit report fits both), and between checking/savings and money transfer. These are routing ambiguities, not model errors: the fix is a multi-label taxonomy, not a better model.
-- **The risk proxy is weak by construction.** Monetary relief depends on what the company decided to do, which no narrative can predict. Low precision against the proxy does not mean the flags are wrong. Hand-labeling 100 complaints is the next step if this number matters.
+- **The risk proxy is weak by construction.** Monetary relief depends on what the company decided to do, which no narrative can predict. Low precision against the proxy does not mean the flags are wrong, which is why I hand-labeled risk as well.
+- **Over-flagging.** In a 10-complaint trial, Haiku marked 8 of 10 complaints high risk. A flag that fires on everything protects no one. Compare each model's "flags high" rate with my own rate.
 - **Vulnerable-population recall is capped.** Tags are set by the consumer on the form, and many narratives never mention military service or age. Recall below [[x]] is partly a ceiling, not only a miss.
 - **Reply drafts drift toward promises.** "We will correct this" is a commitment. Watch the `no_unauthorized_commitment` rate. It is the check most likely to matter to a compliance team.
 - **Redactions.** CFPB replaces names, dates and amounts with XXXX, which removes signal the model would have in production.

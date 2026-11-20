@@ -95,7 +95,11 @@ def review(models, n_disagree=30, n_replies=20):
         if out.exists():
             print(f"{out.name} exists, not overwriting your edits")
             continue
-        preds = [r for r in load_jsonl(C.RESULTS_DIR / f"triage_{m}.jsonl") if "product" in r]
+        tp = C.RESULTS_DIR / f"triage_{m}.jsonl"
+        if not tp.exists():
+            print(f"[{m}] no triage results yet, skipping its disagreement sheet")
+            continue
+        preds = [r for r in load_jsonl(tp) if "product" in r]
         dis = [p for p in preds if p["product"] != s.loc[p["cid"], "product"]]
         rng.shuffle(dis)
         rows = []
@@ -108,7 +112,9 @@ def review(models, n_disagree=30, n_replies=20):
         pd.DataFrame(rows).to_csv(out, index=False)
         print(f"Wrote {out} ({len(rows)} rows). Fill 'verdict' with A, B, both or neither.")
 
-    # 2) Reply grading, to check how far the LLM judge can be trusted.
+    risk_labels()
+
+    # 3) Reply grading, to check how far the LLM judge can be trusted.
     out = C.REVIEW_DIR / "reply_grading.csv"
     if out.exists():
         print(f"{out.name} exists, not overwriting your edits")
@@ -120,7 +126,7 @@ def review(models, n_disagree=30, n_replies=20):
             continue
         judged = {r["cid"] for r in load_jsonl(p) if "error" not in r}
         for r in load_jsonl(C.RESULTS_DIR / f"triage_{m}.jsonl"):
-            if r["cid"] in judged:
+            if r["cid"] in judged and "reply_draft" in r:
                 pool.append((m, r))
     rng.shuffle(pool)
     rows = []
@@ -130,3 +136,24 @@ def review(models, n_disagree=30, n_replies=20):
     pd.DataFrame(rows).to_csv(out, index=False)
     print(f"Wrote {out} ({len(rows)} rows). Put 1 (meets) or 0 (fails) in each criterion column. "
           "Don't look at the _model column until you're done.")
+
+def risk_labels():
+    """Write review/risk_labels.csv. Needs only the sample, not any model results."""
+    C.REVIEW_DIR.mkdir(exist_ok=True)
+    sample = load_sample()
+    sample["cid"] = sample.apply(_cid, axis=1)
+    # The outcome proxy is thin (~9% positive), so every
+    #    proxy-positive complaint is included (up to 40) and the rest is random.
+    #    Nothing about the proxy or any model's answer is shown to the labeler.
+    out = C.REVIEW_DIR / "risk_labels.csv"
+    if out.exists():
+        print(f"{out.name} exists, not overwriting your edits")
+    else:
+        pos = sample[sample["proxy_high_risk"].astype(bool)].sample(frac=1, random_state=C.SEED).head(C.RISK_LABEL_MAX_PROXY_POS)
+        rest = sample.drop(pos.index).sample(frac=1, random_state=C.SEED).head(C.RISK_LABEL_N - len(pos))
+        pick = pd.concat([pos, rest]).sample(frac=1, random_state=C.SEED)
+        pd.DataFrame({"cid": pick["cid"], "company": pick["company"], "narrative": pick["narrative"],
+                      "risk": "", "notes": ""}).to_csv(out, index=False)
+        print(f"Wrote {out} ({len(pick)} rows). Put 'high' or 'low' in the risk column. "
+              "See 'Labeling risk' in the README for what counts as high.")
+

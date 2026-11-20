@@ -45,14 +45,35 @@ python run.py all                                                 # the real run
 
 **Expected cost** for the full run with all three models: about $5–10. Most of that is Opus and the judge. Haiku alone costs pennies.
 
-Then do the two hand reviews (about 1 hour in total):
+Then do the hand reviews (about 3 hours in total, and they can be split across sessions):
 
 ```bash
 python run.py review
+# review/risk_labels.csv           : high or low risk, for 100 complaints (about 2 hours)
 # review/disagreements_<model>.csv : for each case, is label A or B right? (A, B, both, neither)
 # review/reply_grading.csv         : 1 or 0 per rubric criterion, for 20 replies
 python run.py report               # re-scores with your reviews included
 ```
+
+`python run.py risklabels` writes only the risk sheet, and it works before any model has run.
+
+### Labeling risk
+
+Open `review/risk_labels.csv` in Excel or Numbers, and turn on text wrapping for the narrative column. For each complaint, read the narrative and type `high` or `low` in the `risk` column. You can put a few words in `notes` if a case is borderline. The sheet hides the outcome and every model's answer, so your label is independent.
+
+Mark **high** if a compliance or legal reviewer should see it before anyone replies:
+
+- money taken or charged without authorization, fraud, or identity theft
+- possible discrimination (race, age, sex, national origin, disability, public assistance)
+- debt-collection threats, harassment, or collecting a debt the consumer says isn't theirs
+- foreclosure, repossession, or loss of a home or vehicle
+- a clear billing, fee, or credit-report error that cost the consumer money or credit
+- the consumer says they were misled or deceived
+- a servicemember or an older American who describes harm
+
+Mark **low** for confusion, slow service, a request for information, or a complaint that a normal agent reply would resolve.
+
+When unsure, ask yourself: *would I want legal to see this before we reply?* If yes, mark it high. Proxy-positive complaints are oversampled in this sheet, so expect more "high" than in the full data.
 
 The report is `results/report.md`. It ends with a draft resume bullet filled in from your actual numbers.
 

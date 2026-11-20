@@ -9,6 +9,7 @@ Or step by step:
     python run.py latency             # 20 real-time calls per model, for latency
     python run.py judge               # grade reply drafts with the LLM judge
     python run.py review              # write CSVs for your hand review
+    python run.py risklabels          # just the risk-labeling sheet (works before any model runs)
     python run.py report              # results/report.md
 """
 import argparse
@@ -21,7 +22,7 @@ from triage import data, pipeline, report
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["prepare", "triage", "latency", "judge", "review", "report", "all"])
+    ap.add_argument("command", choices=["prepare", "triage", "latency", "judge", "review", "risklabels", "report", "all"])
     ap.add_argument("--models", default=",".join(C.MODELS), help="comma list, e.g. haiku,sonnet")
     ap.add_argument("--mode", default="batch", choices=["batch", "sync"],
                     help="batch is 50%% cheaper but can take up to an hour; sync is immediate")
@@ -52,6 +53,8 @@ def main():
         pipeline.latency(models, mock=a.mock, force=a.force)
     if cmd in ("judge", "all"):
         pipeline.run_judge(models, mode=mode, force=a.force)
+    if cmd == "risklabels":
+        pipeline.risk_labels()
     if cmd in ("review", "all"):
         pipeline.review(models)
     if cmd in ("report", "all"):
