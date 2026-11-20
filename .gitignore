@@ -1,0 +1,7 @@
+data/
+results_mock/
+review_mock/
+__pycache__/
+.venv/
+.env
+*.pyc
